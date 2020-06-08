@@ -99,9 +99,11 @@ void setup() {
   Serial2.begin(57600, SERIAL_8N1, RXD2, TXD2); 
 
   delay(1000);
-  readLora();
-  writeLora("sys factoryRESET\r\n");
-  readLora();
+  if(Serial2.available()) {
+    readLora();
+  }
+  // writeLora("sys factoryRESET\r\n");
+  // readLora();
   writeLora("mac pause\r\n");
   readLora();
   writeLora("radio set freq 869525000\r\n");
