@@ -8,7 +8,8 @@
 #define TXD2 17
 #define LORARX "radio_rx"
 
-char msg[500];
+char* msg = (char *)malloc(sizeof(char) * 512);;
+char* json = (char *)malloc(sizeof(char) * 2010);
 const char* ssid = "FOSCAM";
 const char* password = "HOWLAB2020";
 const char* mqtt_server = "155.210.139.83";
@@ -17,10 +18,6 @@ const char* mqtt_server = "155.210.139.83";
 WiFiClient espClient;
 PubSubClient client(espClient);
 long lastReconnectAttempt = 0;
-const size_t capacity = JSON_ARRAY_SIZE(37) + 37*JSON_OBJECT_SIZE(2) + 37*JSON_OBJECT_SIZE(3) + 660;
-DynamicJsonDocument doc(capacity);
-JsonObject obj[37];
-JsonObject val[37];
 
 // Define NTP Client to get time
 WiFiUDP ntpUDP;
@@ -80,6 +77,7 @@ void readLora(){
       delay(1);
     }
   }
+  //Serial.print(msg);
 }
 
 
@@ -97,8 +95,11 @@ int64_t xx_time_get_time() {
 void setup() {
   Serial.begin(115200);
   Serial2.begin(57600, SERIAL_8N1, RXD2, TXD2); 
-
-  delay(1000);
+  setup_wifi();
+  timeClient.begin();
+  client.setServer(mqtt_server, 1983);
+  client.setCallback(callback);
+  client.setBufferSize(2048);
   if(Serial2.available()) {
     readLora();
   }
@@ -112,12 +113,10 @@ void setup() {
   readLora();
   writeLora("radio set sf sf7\r\n");
   readLora();
+  writeLora("radio set sync 12\r\n");
+  readLora();
 
-  setup_wifi();
-  timeClient.begin();
-  client.setServer(mqtt_server, 1983);
-  client.setCallback(callback);
-  client.setBufferSize(512);
+  
 }
  
 void loop() { 
@@ -143,25 +142,27 @@ void loop() {
   if(strstr(msg, LORARX)){
     char * token = strtok(msg, " ");
     token = strtok(NULL, " ");
-    // Serial.println(token);
-    // char x[2], y[2], z[2];  
-    // for(int i = 0; i<37; i++){
-    //   for(int j = 0; j<2; j++){
-    //     x[j]= token[j+i*6];
-    //     y[j]= token[j+2+i*6];
-    //     z[j]= token[j+4+i*6];
-    //   }
-    //   JsonObject obj[i] = doc.createNestedObject();
-    //   obj[i]["ts"] =  timeClient.getEpochTime()*1000;
-
-    //   JsonObject val[i] = obj[i].createNestedObject("values");
-    //   val[i]["x"] = strtol(x,NULL,16);
-    //   val[i]["y"] = strtol(y,NULL,16);
-    //   val[i]["z"] = strtol(z,NULL,16);
-    // }
-    // serializeJson(doc, Serial);
+    
+    char* jsonPnt = json;
+    char c[5];
+    int16_t values[3];    
+    long epoch = timeClient.getEpochTime();
+    int mSec = 0;
+    jsonPnt+=sprintf(jsonPnt, "[");
+    for(int i = 0; i < 20; i++){
+      mSec = i*10;
+      token+=sprintf( c, "%c%c%c%c", token[0], token[1], token[2], token[3] );
+      values[0] = strtol(c,NULL,16);
+      token+=sprintf( c, "%c%c%c%c", token[0], token[1], token[2], token[3] );
+      values[1] =strtol(c,NULL,16);
+      token+=sprintf( c, "%c%c%c%c", token[0], token[1], token[2], token[3] );
+      values[2] =strtol(c,NULL,16);
+      jsonPnt+=sprintf(jsonPnt, "{\"ts\":%ld%d,\"data\":{\"x\":%d,\"y\":%d,\"z\":%d}},",  epoch, mSec, values[0], values[1], values[2]);
+    }  
+    sprintf(jsonPnt-1, "]");    
     Serial.println("Rx received");
-    client.publish("lora", token);
+    Serial.println(client.publish("lora", json));
+    Serial.println(client.getBufferSize());
   }
 }
 
